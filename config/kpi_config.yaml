@@ -1,0 +1,25 @@
+# KPI configuration (placeholders for MVP)
+# Keep formulas/thresholds here (no PHI).
+
+kpis:
+  cytogenetics_total_volume:
+    description: "Total Cytogenetics tests per period"
+    thresholds:
+      warning: 20
+      critical: 10
+  tat:
+    description: "Turnaround time (hours)"
+    aggregates: [avg, min, max]
+    thresholds:
+      standard: 48  # Used by frontend monthly table for "TAT % over standard"
+      warning: 48
+      critical: 72
+  percent_change:
+    description: "MoM and YoY percentage change"
+  tests_per_fte:
+    description: "8 cases/day = 1 FTE"
+    baseline_per_fte_per_day: 8
+
+metadata:
+  version: 0.1.0
+  updated: "2025-08-20"

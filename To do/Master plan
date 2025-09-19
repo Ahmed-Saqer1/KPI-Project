@@ -1,0 +1,85 @@
+# ✅ Windsurf To-Do List for Cytogenetics Productivity & KPI Tracker
+
+## Rules
+- Always build in **small, testable increments**.  
+- Each task must be **checkable** and committed with a clear description.  
+- Use **Python (FastAPI)** for backend, **React** for frontend.  
+- Keep code **HIPAA-aware** (no unnecessary PHI exposure).  
+- All KPI formulas/thresholds should live in a **config file (YAML/JSON)**.  
+- Log all integrations and errors with timestamps.  
+- Defer **role-based access & alerting** to Phase 2.  
+- Assume **local deployment** for Phase 1 (no cloud infra yet).  
+-Mark off completed steps in @project-to-do.md when completeting
+
+---
+
+## Phase 1 (POC / MVP)
+
+### 1. Project Setup
+- [x] Initialize FastAPI backend (Python) with modular RESTful architecture  
+- [x] Initialize React frontend with responsive design (Chrome/Edge/Firefox)  
+- [x] Create repo structure:
+  - `/backend` → FastAPI, KPI engine, integrations  
+  - `/frontend` → React UI  
+  - `/config` → YAML/JSON for KPI formulas & thresholds  
+
+---
+
+### 2. Google Sheets Integration (Read + Input)
+- [x] Connect to Google Sheets API (service account auth)  
+- [x] Implement read:
+  - [x] Validate data formats  
+  - [x] Handle blank/malformed rows  
+  - [x] Log pulls with timestamps + sheet versions  
+- [x] Implement input:
+  - [x] Manager can enter daily productivity data (FTE hours worked, remote/in-lab)  
+  - [x] Save entries into Google Sheet  
+  - [x] Auto-calc totals per staff/day  
+  - [x] Confirm + persist successful entries  
+
+---
+
+---
+
+### 3. KPI Engine
+- [x] Implement KPI calculations:
+  - FISH test volume (total + PET, ST, URO subtypes)  
+  - Total Cytogenetics test volume  
+  - TAT (avg, min, max)  
+  - % change MoM + YoY  
+  - Tests per FTE (8 cases/day = 1 FTE)  
+- [x] Store formulas/thresholds in config file (YAML/JSON)  
+
+---
+
+### 4. Dashboard & Reporting
+- [x] Build React dashboard:
+  - KPI summaries with color-coded deltas  
+  - Month/category switching  
+  - Dynamic filters (date ranges, test category, FTE grouping)  
+- [x] Implement CSV export of KPI reports  
+- [x] Connect frontend to backend endpoints  
+
+---
+
+### 5. PowerBI Integration
+- [x] Add PowerBI API integration for advanced visualization  
+- [x] Secure connection (no PHI exposure, HIPAA-aware)  
+
+---
+
+### 6. Logging & Monitoring
+- [x] Log all data pulls (Google Sheets) with timestamps  
+- [x] Log KPI calculation errors/warnings  
+- [x] Store logs in backend (accessible via API)  
+
+---
+
+## Future Items (Phase 2+)
+- [ ] Role-based authentication (Manager vs. Supervisor vs. Executive)  
+- [ ] Alerting system (threshold breaches, TAT delays, etc.)  
+- [ ] Editable manual entry forms (remove Google Sheets dependency)  
+- [ ] Expansion beyond Cytogenetics dept.  
+- [ ] Admin UI for logs + config management 
+- [ ] Connection to Lab Information System Database
+- [ ] Use Real Data base Data

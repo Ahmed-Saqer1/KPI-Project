@@ -1,0 +1,6 @@
+fastapi>=0.110,<0.117
+uvicorn[standard]>=0.23,<0.32
+python-dotenv>=1.0.0
+PyYAML>=6.0.0
+msal>=1.29.0
+requests>=2.31.0

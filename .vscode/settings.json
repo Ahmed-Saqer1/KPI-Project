@@ -1,0 +1,16 @@
+{
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore",
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "**/frontend/package.json",
+        "frontend/package.json",
+        "./frontend/package.json",
+        "/frontend/package.json"
+      ],
+      "url": "https://json.schemastore.org/package.json"
+    }
+  ]
+}
