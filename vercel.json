@@ -2,11 +2,7 @@
   "functions": {
     "api/**/*.py": {
       "runtime": "python3.11",
-      "includeFiles": [
-        "backend/app/**",
-        "backend/requirements.txt",
-        "config/kpi_config.yaml"
-      ]
+      "includeFiles": "{backend/app/**,backend/requirements.txt,config/kpi_config.yaml}"
     }
   },
   "installCommand": "npm ci --prefix frontend",
