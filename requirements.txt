@@ -1,0 +1,3 @@
+# Root requirements for Vercel Python Functions
+# Delegate to backend/requirements.txt to keep single source of truth
+-r backend/requirements.txt

@@ -1,0 +1,21 @@
+{
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.11",
+      "includeFiles": [
+        "backend/**",
+        "config/kpi_config.yaml"
+      ]
+    }
+  },
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    }
+  ],
+  "rewrites": [
+    { "source": "/((?!api)(?!.*\\..*).*)", "destination": "/index.html" }
+  ]
+}
