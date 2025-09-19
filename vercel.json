@@ -3,18 +3,15 @@
     "api/**/*.py": {
       "runtime": "python3.11",
       "includeFiles": [
-        "backend/**",
+        "backend/app/**",
+        "backend/requirements.txt",
         "config/kpi_config.yaml"
       ]
     }
   },
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
-    }
-  ],
+  "installCommand": "npm ci --prefix frontend",
+  "buildCommand": "npm run build --prefix frontend",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     { "source": "/((?!api)(?!.*\\..*).*)", "destination": "/index.html" }
   ]
