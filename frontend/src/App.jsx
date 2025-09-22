@@ -1093,11 +1093,13 @@ export default function App() {
         thisYearRows[m].push(t)
         if (caseKey) {
           const bucket = thisYearCases[m]
-          if (!bucket.has(caseKey)) bucket.set(caseKey, { abn: false, fail: false, stat: false, prio0: false, tatSum: 0, tatN: 0 })
+          if (!bucket.has(caseKey)) bucket.set(caseKey, { abn: false, fail: false, blank: false, cancel: false, stat: false, prio0: false, tatSum: 0, tatN: 0 })
           const agg = bucket.get(caseKey)
           const abnRaw = (t.abn_norm == null ? '' : String(t.abn_norm)).trim().toUpperCase()
           if (abnRaw.startsWith('A')) agg.abn = true
           if (abnRaw.startsWith('F')) agg.fail = true
+          if (abnRaw === '') agg.blank = true
+          if (abnRaw.startsWith('C')) agg.cancel = true
           const flags = detectFlags(t)
           if (flags.stat) agg.stat = true
           // Medical STAT via Priority column (0)
@@ -1126,12 +1128,15 @@ export default function App() {
       const prevYearCount = prevYearCounts[m] || 0
       const prevMonthCount = m === 0 ? decPrevYearCount : thisYearCounts[m - 1]
 
-      // Counts for abnormal/failure/stat at the case level
-      let abnormalCount = 0, failureCount = 0, statCount = 0
+      // Counts for abnormal/failure/stat/negative/canceled at the case level
+      let abnormalCount = 0, failureCount = 0, statCount = 0, negativeCount = 0, cancelCount = 0
       let tatStatSum = 0, tatStatN = 0
       for (const [, info] of monthCases) {
         if (info.abn) abnormalCount++
         if (info.fail) failureCount++
+        // Negative case: Abn/Norm blank on any row for the case AND not marked abnormal or failure
+        if (info.blank && !info.abn && !info.fail) negativeCount++
+        if (info.cancel) cancelCount++
         if (info.prio0) {
           statCount++
           if (info.tatN > 0) {
@@ -1163,10 +1168,13 @@ export default function App() {
         mom,
         abnormalCases: abnormalCount,
         percentAbnormal: total > 0 ? (abnormalCount * 100.0 / total) : null,
+        negativeCases: negativeCount,
+        failurePct: total > 0 ? (failureCount * 100.0 / total) : null,
         percentPositive: null,
         percentNegative: null,
         failures: failureCount,
         statCases: statCount,
+        canceledCases: cancelCount,
         avgTat: tatN ? (tatSum / tatN) : null,
         statAvgTat: tatStatN ? (tatStatSum / tatStatN) : null,
         tatOverStdPct: tatN ? (tatOverStd * 100.0 / tatN) : null,
@@ -1194,11 +1202,13 @@ export default function App() {
         thisYearRows[m].push(t)
         if (caseKey) {
           const bucket = thisYearCases[m]
-          if (!bucket.has(caseKey)) bucket.set(caseKey, { abn: false, fail: false, stat: false, prio0: false, tatSum: 0, tatN: 0 })
+          if (!bucket.has(caseKey)) bucket.set(caseKey, { abn: false, fail: false, blank: false, cancel: false, stat: false, prio0: false, tatSum: 0, tatN: 0 })
           const agg = bucket.get(caseKey)
           const abnRaw = (t.abn_norm == null ? '' : String(t.abn_norm)).trim().toUpperCase()
           if (abnRaw.startsWith('A')) agg.abn = true
           if (abnRaw.startsWith('F')) agg.fail = true
+          if (abnRaw === '') agg.blank = true
+          if (abnRaw.startsWith('C')) agg.cancel = true
           const flags = detectFlags(t)
           if (flags.stat) agg.stat = true
           if (t.priority != null && Number(t.priority) === 0) agg.prio0 = true
@@ -1225,11 +1235,13 @@ export default function App() {
       const prevYearCount = prevYearCounts[m] || 0
       const prevMonthCount = m === 0 ? decPrevYearCount : thisYearCounts[m - 1]
 
-      let abnormalCount = 0, failureCount = 0, statCount = 0
+      let abnormalCount = 0, failureCount = 0, statCount = 0, negativeCount = 0, cancelCount = 0
       let tatStatSum = 0, tatStatN = 0
       for (const [, info] of monthCases) {
         if (info.abn) abnormalCount++
         if (info.fail) failureCount++
+        if (info.blank && !info.abn && !info.fail) negativeCount++
+        if (info.cancel) cancelCount++
         if (info.prio0) {
           statCount++
           if (info.tatN > 0) {
@@ -1259,10 +1271,12 @@ export default function App() {
         mom,
         abnormalCases: abnormalCount,
         percentAbnormal: total > 0 ? (abnormalCount * 100.0 / total) : null,
+        negativeCases: negativeCount,
         percentPositive: null,
         percentNegative: null,
         failures: failureCount,
         statCases: statCount,
+        canceledCases: cancelCount,
         avgTat: tatN ? (tatSum / tatN) : null,
         statAvgTat: tatStatN ? (tatStatSum / tatStatN) : null,
         tatOverStdPct: tatN ? (tatOverStd * 100.0 / tatN) : null,
@@ -1958,10 +1972,13 @@ export default function App() {
                         <th className="py-1 pr-3">Total Volume</th>
                         <th className="py-1 pr-3">Change Y/Y %</th>
                         <th className="py-1 pr-3">Change M/M %</th>
-                        <th className="py-1 pr-3"># of Abnormal cases</th>
-                        <th className="py-1 pr-3">% of Abnormal cases</th>
-                        <th className="py-1 pr-3">Number of failures</th>
-                        <th className="py-1 pr-3">Number of Stat cases</th>
+                        <th className="py-1 pr-3"># Abnormal cases</th>
+                        <th className="py-1 pr-3">% Abnormal cases</th>
+                        <th className="py-1 pr-3"># Negative</th>
+                        <th className="py-1 pr-3"># Failures</th>
+                        <th className="py-1 pr-3">% Failures</th>
+                        <th className="py-1 pr-3"># Stat</th>
+                        <th className="py-1 pr-3"># Canceled</th>
                         <th className="py-1 pr-3">Average TAT</th>
                         <th className="py-1 pr-3">TAT for STAT cases</th>
                         <th className="py-1 pr-3">TAT % over standard</th>
@@ -1976,8 +1993,11 @@ export default function App() {
                           <td className="py-1 pr-3 tabular-nums" style={{ color: r.mom == null ? '#64748b' : (r.mom >= 0 ? '#10b981' : '#ef4444') }}>{fmtPct(r.mom)}</td>
                           <td className="py-1 pr-3 tabular-nums">{r.abnormalCases}</td>
                           <td className="py-1 pr-3 tabular-nums">{fmtPct(r.percentAbnormal)}</td>
+                          <td className="py-1 pr-3 tabular-nums">{r.negativeCases}</td>
                           <td className="py-1 pr-3 tabular-nums">{r.failures}</td>
+                          <td className="py-1 pr-3 tabular-nums">{fmtPct(r.failurePct)}</td>
                           <td className="py-1 pr-3 tabular-nums">{r.statCases}</td>
+                          <td className="py-1 pr-3 tabular-nums">{r.canceledCases}</td>
                           <td className="py-1 pr-3 tabular-nums">{fmtH(r.avgTat)}</td>
                           <td className="py-1 pr-3 tabular-nums">{fmtH(r.statAvgTat)}</td>
                           <td className="py-1 pr-3 tabular-nums">{fmtPct(r.tatOverStdPct)}</td>
@@ -2007,13 +2027,18 @@ export default function App() {
                           return n ? (s / n) : null
                         })()
                         const sumFailures = monthlyTable.reduce((a, r) => a + (r.failures || 0), 0)
+                        const sumNegatives = monthlyTable.reduce((a, r) => a + (r.negativeCases || 0), 0)
                         const sumAbnormal = monthlyTable.reduce((a, r) => a + (r.abnormalCases || 0), 0)
                         const sumStat = monthlyTable.reduce((a, r) => a + (r.statCases || 0), 0)
+                        const sumCanceled = monthlyTable.reduce((a, r) => a + (r.canceledCases || 0), 0)
                         return (
                           <>
                             <tr className="border-t border-slate-300 bg-slate-50 font-medium">
                               <td className="py-1 pr-3">AVERAGE</td>
                               <td className="py-1 pr-3 tabular-nums">{avgVolume.toFixed(0)}</td>
+                              <td className="py-1 pr-3"></td>
+                              <td className="py-1 pr-3"></td>
+                              <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3"></td>
@@ -2031,8 +2056,11 @@ export default function App() {
                               <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3 tabular-nums">{sumAbnormal}</td>
                               <td className="py-1 pr-3"></td>
+                              <td className="py-1 pr-3 tabular-nums">{sumNegatives}</td>
                               <td className="py-1 pr-3 tabular-nums">{sumFailures}</td>
+                              <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3 tabular-nums">{sumStat}</td>
+                              <td className="py-1 pr-3 tabular-nums">{sumCanceled}</td>
                               <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3"></td>
                               <td className="py-1 pr-3"></td>
