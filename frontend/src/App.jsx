@@ -666,163 +666,119 @@ export default function App() {
   }
 
   const handleUnifiedFileSelected = async (e) => {
-    const file = e.target.files && e.target.files[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
     try {
       setUploadBusy(true)
       setUploadErr(null)
 
-      const name = (file.name || '').toLowerCase()
-      let headers = []
-      let rows = []
+      const accumTests = []
+      const accumProd = []
+      const headerCandidates = ['date','workdate','dateworked','receiveddate','collecteddate','resulteddate','signedoutdate','dos','servicedate','workday','day','worksheetdate','triage','case','analyzed','reviewed','date/time']
 
-      if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-        const ab = await file.arrayBuffer()
-        const wb = XLSX.read(ab, { type: 'array', cellDates: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const a2d = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
-        if (!a2d.length) throw new Error('Empty or invalid file')
-        // Try to detect the header row within the first few lines (supports both tests and productivity files)
-        let headerRowIndex = 0
-        const headerCandidates = ['date','workdate','dateworked','receiveddate','collecteddate','resulteddate','signedoutdate','dos','servicedate','workday','day','worksheetdate','triage','case','analyzed','reviewed','date/time']
-        for (let i = 0; i < Math.min(10, a2d.length); i++) {
-          const row = a2d[i] || []
-          const norm = row.map(normalizeHeader)
-          const contains = headerCandidates.some(c => norm.includes(normalizeHeader(c)) || norm.some(h => h.includes(normalizeHeader(c))))
-          if (contains) { headerRowIndex = i; break }
-        }
-        headers = (a2d[headerRowIndex] || []).map(normalizeHeader)
-        rows = a2d.slice(headerRowIndex + 1)
-        // Respect hard cap before any filtering/mapping
-        rows = rows.slice(0, MAX_DATA_ROWS)
-        // Remove completely blank rows
-        rows = rows.filter(r => (r || []).some(c => String(c || '').trim() !== ''))
-      } else {
-        const text = await new Promise((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve(String(reader.result || ''))
-          reader.onerror = () => reject(new Error('Failed to read file'))
-          reader.readAsText(file)
-        })
-        const parsed = parseDelimitedText(text)
-        headers = parsed.headers
-        rows = parsed.rows
-        // Respect hard cap before any filtering/mapping
-        rows = rows.slice(0, MAX_DATA_ROWS)
-        // Remove completely blank rows
-        rows = rows.filter(r => (r || []).some(c => String(c || '').trim() !== ''))
-      }
+      // Helper to process one parsed unit (headers + rows)
+      const processUnit = (headers, rows) => {
+        if (!headers.length || !rows.length) return false
 
-      if (!headers.length || !rows.length) throw new Error('Empty or invalid file')
+        // Heuristic: does this look like a tests export?
+        const idxTriage = findIdxContains(headers, ['triage date/time (job creation)', 'triage', 'job creation', 'date/time', 'datetime'])
+        const idxOneCase = findIdxContains(headers, ['1-case', '1case'])
+        const idxOneCaseDt = idxOneCase !== -1 ? idxOneCase + 1 : -1
+        const idxReviewedBy = findIdxContains(headers, ['reviewed by', 'reviewedby'])
+        const idxReviewedDt = idxReviewedBy !== -1 ? idxReviewedBy + 1 : -1
+        const idxAnalyzedBy = findIdxContains(headers, ['analyzed by', 'analyzedby'])
+        const idxAnalyzedDt = idxAnalyzedBy !== -1 ? idxAnalyzedBy + 1 : -1
+        // Loose match for analyzed-by column (e.g., "Analyzed By:") on normalized headers
+        const idxAnalyzedLoose = headers.findIndex(h => (h || '').includes('analy'))
+        const idxAnalyzedAny = (idxAnalyzedBy !== -1) ? idxAnalyzedBy : idxAnalyzedLoose
+        // QC performer column (e.g., "Do QC", "QC By", "Quality Control")
+        let idxQCBy = findIdxContains(headers, ['do qc','qc by','quality control','doqc','qcby','qualitycontrol','qc'])
+        // Also consider core Karyotyping columns as a strong signal of tests export
+        const hasCaseNoHdr = indexOfHeader(headers, ['case','case#','caseno','case number','casenumber','caseid']) !== -1
+        const hasAbnNormHdr = indexOfHeader(headers, ['abn/norm','abnnorm','abn_norm']) !== -1
+        const hasTatHdr = indexOfHeader(headers, ['tat']) !== -1
 
-      // Heuristic: does this look like a tests export?
-      const idxTriage = findIdxContains(headers, ['triage date/time (job creation)', 'triage', 'job creation', 'date/time', 'datetime'])
-      const idxOneCase = findIdxContains(headers, ['1-case', '1case'])
-      const idxOneCaseDt = idxOneCase !== -1 ? idxOneCase + 1 : -1
-      const idxReviewedBy = findIdxContains(headers, ['reviewed by', 'reviewedby'])
-      const idxReviewedDt = idxReviewedBy !== -1 ? idxReviewedBy + 1 : -1
-      const idxAnalyzedBy = findIdxContains(headers, ['analyzed by', 'analyzedby'])
-      const idxAnalyzedDt = idxAnalyzedBy !== -1 ? idxAnalyzedBy + 1 : -1
-      // Loose match for analyzed-by column (e.g., "Analyzed By:") on normalized headers
-      const idxAnalyzedLoose = headers.findIndex(h => (h || '').includes('analy'))
-      const idxAnalyzedAny = (idxAnalyzedBy !== -1) ? idxAnalyzedBy : idxAnalyzedLoose
-      // QC performer column (e.g., "Do QC", "QC By", "Quality Control")
-      let idxQCBy = findIdxContains(headers, ['do qc','qc by','quality control','doqc','qcby','qualitycontrol','qc'])
-      // Also consider core Karyotyping columns as a strong signal of tests export
-      const hasCaseNoHdr = indexOfHeader(headers, ['case','case#','caseno','case number','casenumber','caseid']) !== -1
-      const hasAbnNormHdr = indexOfHeader(headers, ['abn/norm','abnnorm','abn_norm']) !== -1
-      const hasTatHdr = indexOfHeader(headers, ['tat']) !== -1
+        const looksLikeTests = (idxTriage !== -1) || (idxOneCaseDt !== -1) || (idxReviewedDt !== -1) || (idxAnalyzedDt !== -1) || (idxAnalyzedAny !== -1) || hasCaseNoHdr || hasAbnNormHdr || hasTatHdr
 
-      const looksLikeTests = (idxTriage !== -1) || (idxOneCaseDt !== -1) || (idxReviewedDt !== -1) || (idxAnalyzedDt !== -1) || (idxAnalyzedAny !== -1) || hasCaseNoHdr || hasAbnNormHdr || hasTatHdr
+        if (looksLikeTests) {
+          // Map additional columns for case number, Abn/Norm flag, and TAT
+          let idxCaseNo = indexOfHeader(headers, ['case','case#','caseno','case number','casenumber','caseid'])
+          if (idxCaseNo === -1) idxCaseNo = findIdxContains(headers, ['case','case#','caseno','casenumber','caseid'])
+          let idxAbnNorm = indexOfHeader(headers, ['abn/norm','abnnorm','abn_norm'])
+          let idxTat = indexOfHeader(headers, ['tat'])
+          // Priority column (medical stat if value === 0)
+          let idxPriority = indexOfHeader(headers, ['prty','priority','prio'])
+          // Column A Date (worksheet/date header). We will forward-fill blanks until the next date.
+          let idxWorkDate = indexOfHeader(headers, ['worksheetdate','workdate','date','workday','day','worksheet date'])
 
-      let handled = false
+          let lastWorkISO = ''
+          for (const arr of rows) {
+            const flagOneCase = idxOneCase !== -1 ? String(arr[idxOneCase] || '').toLowerCase() : ''
+            const endRaw = (idxReviewedDt !== -1 ? arr[idxReviewedDt]
+                            : (idxOneCaseDt !== -1 ? arr[idxOneCaseDt]
+                            : (idxAnalyzedDt !== -1 ? arr[idxAnalyzedDt] : '')))
+            const startRaw = (idxTriage !== -1 ? arr[idxTriage]
+                            : (idxAnalyzedDt !== -1 ? arr[idxAnalyzedDt] : ''))
+            const ended = toISODatetime(endRaw)
+            const started = toISODatetime(startRaw)
+            if (!ended && flagOneCase && ['false', '0', 'no'].includes(flagOneCase)) continue
 
-      if (looksLikeTests) {
-        // Map additional columns for case number, Abn/Norm flag, and TAT
-        let idxCaseNo = indexOfHeader(headers, ['case','case#','caseno','case number','casenumber','caseid'])
-        if (idxCaseNo === -1) idxCaseNo = findIdxContains(headers, ['case','case#','caseno','casenumber','caseid'])
-        let idxAbnNorm = indexOfHeader(headers, ['abn/norm','abnnorm','abn_norm'])
-        let idxTat = indexOfHeader(headers, ['tat'])
-        // Priority column (medical stat if value === 0)
-        let idxPriority = indexOfHeader(headers, ['prty','priority','prio'])
-        // Column A Date (worksheet/date header). We will forward-fill blanks until the next date.
-        let idxWorkDate = indexOfHeader(headers, ['worksheetdate','workdate','date','workday','day','worksheet date'])
-
-        const tests = []
-        let lastWorkISO = ''
-        for (const arr of rows) {
-          const flagOneCase = idxOneCase !== -1 ? String(arr[idxOneCase] || '').toLowerCase() : ''
-          const endRaw = (idxReviewedDt !== -1 ? arr[idxReviewedDt]
-                          : (idxOneCaseDt !== -1 ? arr[idxOneCaseDt]
-                          : (idxAnalyzedDt !== -1 ? arr[idxAnalyzedDt] : '')))
-          const startRaw = (idxTriage !== -1 ? arr[idxTriage]
-                          : (idxAnalyzedDt !== -1 ? arr[idxAnalyzedDt] : ''))
-          const ended = toISODatetime(endRaw)
-          const started = toISODatetime(startRaw)
-          if (!ended && flagOneCase && ['false', '0', 'no'].includes(flagOneCase)) continue
-
-          const caseNo = idxCaseNo !== -1 ? normalizeCaseNo(arr[idxCaseNo]) : ''
-          const abnRaw = idxAbnNorm !== -1 ? String(arr[idxAbnNorm] || '').trim().toUpperCase() : ''
-          const abnFlag = abnRaw ? abnRaw.charAt(0) : '' // Expect 'A', 'F', 'N', 'L', etc.
-          const tatRaw = idxTat !== -1 ? arr[idxTat] : null
-          const tatHours = parseTatToHours(tatRaw)
-          // Priority parsing (treat exact numeric 0 as STAT)
-          let priorityVal = undefined
-          if (idxPriority !== -1) {
-            const raw = arr[idxPriority]
-            const s = String(raw ?? '').trim()
-            if (s !== '') {
-              const n = Number(s.replace(/[^0-9.\-]/g, ''))
-              if (!Number.isNaN(n)) priorityVal = n
+            const caseNo = idxCaseNo !== -1 ? normalizeCaseNo(arr[idxCaseNo]) : ''
+            const abnRaw = idxAbnNorm !== -1 ? String(arr[idxAbnNorm] || '').trim().toUpperCase() : ''
+            const abnFlag = abnRaw ? abnRaw.charAt(0) : ''
+            const tatRaw = idxTat !== -1 ? arr[idxTat] : null
+            const tatHours = parseTatToHours(tatRaw)
+            // Priority parsing (treat exact numeric 0 as STAT)
+            let priorityVal = undefined
+            if (idxPriority !== -1) {
+              const raw = arr[idxPriority]
+              const s = String(raw ?? '').trim()
+              if (s !== '') {
+                const n = Number(s.replace(/[^0-9.\-]/g, ''))
+                if (!Number.isNaN(n)) priorityVal = n
+              }
             }
-          }
 
-          // Determine worksheet work date from Column A (or similar). Forward-fill blanks.
-          let workISO = ''
-          if (idxWorkDate !== -1) {
-            workISO = toISODateOnly(arr[idxWorkDate]) || ''
-            if (!workISO && lastWorkISO) workISO = lastWorkISO
-            if (workISO) lastWorkISO = workISO
-          }
+            // Determine worksheet work date from Column A (or similar). Forward-fill blanks.
+            let workISO = ''
+            if (idxWorkDate !== -1) {
+              workISO = toISODateOnly(arr[idxWorkDate]) || ''
+              if (!workISO && lastWorkISO) workISO = lastWorkISO
+              if (workISO) lastWorkISO = workISO
+            }
 
-          // Extract technician names from the "Analyzed by" column (strict or loose index)
-          const analyzedByRaw = idxAnalyzedAny !== -1 ? String(arr[idxAnalyzedAny] || '').trim() : ''
-          const analyzedTechs = analyzedByRaw ? extractTechNames(analyzedByRaw) : []
+            // Extract technician names from the "Analyzed by" column (strict or loose index)
+            const analyzedByRaw = idxAnalyzedAny !== -1 ? String(arr[idxAnalyzedAny] || '').trim() : ''
+            const analyzedTechs = analyzedByRaw ? extractTechNames(analyzedByRaw) : []
 
-          // Extract reviewer and QC names (column P/R typical). Header-based first, with positional fallback.
-          let reviewedByRaw = idxReviewedBy !== -1 ? String(arr[idxReviewedBy] || '').trim() : ''
-          let qcByRaw = idxQCBy !== -1 ? String(arr[idxQCBy] || '').trim() : ''
-          // Fallback to typical positions if headers not detected (P=16th -> index 15, R=18th -> index 17)
-          if (!reviewedByRaw && Array.isArray(arr) && arr.length >= 16) {
-            reviewedByRaw = String(arr[15] || '').trim()
-          }
-          if (!qcByRaw && Array.isArray(arr) && arr.length >= 18) {
-            qcByRaw = String(arr[17] || '').trim()
-          }
-          const reviewers = reviewedByRaw ? extractTechNames(reviewedByRaw).filter(isLikelyPersonName) : []
-          const qcPeople = qcByRaw ? extractTechNames(qcByRaw).filter(isLikelyPersonName) : []
+            // Extract reviewer and QC names (column P/R typical). Header-based first, with positional fallback.
+            let reviewedByRaw = idxReviewedBy !== -1 ? String(arr[idxReviewedBy] || '').trim() : ''
+            let qcByRaw = idxQCBy !== -1 ? String(arr[idxQCBy] || '').trim() : ''
+            if (!reviewedByRaw && Array.isArray(arr) && arr.length >= 16) reviewedByRaw = String(arr[15] || '').trim()
+            if (!qcByRaw && Array.isArray(arr) && arr.length >= 18) qcByRaw = String(arr[17] || '').trim()
+            const reviewers = reviewedByRaw ? extractTechNames(reviewedByRaw).filter(isLikelyPersonName) : []
+            const qcPeople = qcByRaw ? extractTechNames(qcByRaw).filter(isLikelyPersonName) : []
 
-          tests.push({
-            category: 'CYTO',
-            case_no: caseNo || undefined,
-            abn_norm: abnFlag || undefined,
-            tat_hours: tatHours != null ? tatHours : undefined,
-            received_at: started || undefined,
-            resulted_at: ended || undefined,
-            work_date: workISO || undefined,
-            analyzed_by: analyzedByRaw || undefined,
-            analyzed_techs: analyzedTechs.length ? analyzedTechs : undefined,
-            reviewed_by: reviewedByRaw || undefined,
-            reviewers: reviewers.length ? reviewers : undefined,
-            qc_by: qcByRaw || undefined,
-            qc_people: qcPeople.length ? qcPeople : undefined,
-            priority: priorityVal,
-          })
+            accumTests.push({
+              category: 'CYTO',
+              case_no: caseNo || undefined,
+              abn_norm: abnFlag || undefined,
+              tat_hours: tatHours != null ? tatHours : undefined,
+              received_at: started || undefined,
+              resulted_at: ended || undefined,
+              work_date: workISO || undefined,
+              analyzed_by: analyzedByRaw || undefined,
+              analyzed_techs: analyzedTechs.length ? analyzedTechs : undefined,
+              reviewed_by: reviewedByRaw || undefined,
+              reviewers: reviewers.length ? reviewers : undefined,
+              qc_by: qcByRaw || undefined,
+              qc_people: qcPeople.length ? qcPeople : undefined,
+              priority: priorityVal,
+            })
+          }
+          return true
         }
-        if (tests.length) { setTestsJSON(JSON.stringify(tests, null, 2)); handled = true }
-      }
 
-      if (!handled) {
         // Treat as productivity
         let idxDate = indexOfHeader(headers, ['date','workdate','dateworked','workday','day','receiveddate','collecteddate','resulteddate','signedoutdate','dos','servicedate','worksheetdate'])
         let idxStaffId = indexOfHeader(headers, ['staff_id','staffid','employeeid','id'])
@@ -847,10 +803,7 @@ export default function App() {
           }
         }
         if (idxDate === -1) idxDate = guessDateIdx(headers, rows)
-        if (idxDate === -1) {
-          const available = headers.filter(Boolean).join(', ') || '(none)'
-          throw new Error(`Missing required "date" column. Available headers: ${available}`)
-        }
+        if (idxDate === -1) return false
 
         const itemsRaw = []
         let lastISODate = ''
@@ -920,21 +873,81 @@ export default function App() {
           try { const d = new Date(r.date); return d >= s && d <= eDay } catch { return false }
         })
         const normalized = inRange.map(normalizeRow)
-        setUploadedProductivity(normalized)
-        const list = aggregateEmployees(normalized)
-        setUploadedEmpSummary(list)
+        if (normalized.length) accumProd.push(...normalized)
+        return normalized.length > 0
+      }
+
+      // Iterate files (and all worksheets within each Excel workbook)
+      for (const file of files) {
+        const name = (file.name || '').toLowerCase()
+        if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+          const ab = await file.arrayBuffer()
+          const wb = XLSX.read(ab, { type: 'array', cellDates: true })
+          for (const sheetName of wb.SheetNames) {
+            const ws = wb.Sheets[sheetName]
+            const a2d = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+            if (!a2d.length) continue
+            let headerRowIndex = 0
+            for (let i = 0; i < Math.min(10, a2d.length); i++) {
+              const row = a2d[i] || []
+              const norm = row.map(normalizeHeader)
+              const contains = headerCandidates.some(c => norm.includes(normalizeHeader(c)) || norm.some(h => h.includes(normalizeHeader(c))))
+              if (contains) { headerRowIndex = i; break }
+            }
+            let headers = (a2d[headerRowIndex] || []).map(normalizeHeader)
+            let rows = a2d.slice(headerRowIndex + 1)
+            rows = rows.slice(0, MAX_DATA_ROWS)
+            rows = rows.filter(r => (r || []).some(c => String(c || '').trim() !== ''))
+            processUnit(headers, rows)
+          }
+        } else {
+          const text = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(String(reader.result || ''))
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            reader.readAsText(file)
+          })
+          const parsed = parseDelimitedText(text)
+          let headers = parsed.headers
+          let rows = parsed.rows
+          rows = rows.slice(0, MAX_DATA_ROWS)
+          rows = rows.filter(r => (r || []).some(c => String(c || '').trim() !== ''))
+          processUnit(headers, rows)
+        }
+      }
+
+      let handled = false
+      if (accumTests.length) {
+        let current = []
+        try { const p = JSON.parse(testsJSON || '[]'); if (Array.isArray(p)) current = p } catch {}
+        const combined = current.concat(accumTests)
+        setTestsJSON(JSON.stringify(combined, null, 2))
+        handled = true
+      }
+      if (accumProd.length) {
+        const combinedProd = (uploadedProductivity && uploadedProductivity.length) ? uploadedProductivity.concat(accumProd) : accumProd
+        setUploadedProductivity(combinedProd)
+        setUploadedEmpSummary(aggregateEmployees(combinedProd))
         handled = true
       }
 
       if (!handled) throw new Error('Could not detect file type or no usable records found')
     } catch (err) {
-      setUploadedProductivity([])
-      setUploadedEmpSummary([])
       setUploadErr(err.message || String(err))
     } finally {
       setUploadBusy(false)
       if (e.target) e.target.value = ''
     }
+  }
+  
+  // Clear currently loaded tests and productivity data
+  const handleClearData = () => {
+    const ok = window.confirm('Clear current uploaded data and tests? This cannot be undone.')
+    if (!ok) return
+    setTestsJSON('[]')
+    setUploadedProductivity([])
+    setUploadedEmpSummary([])
+    setUploadErr(null)
   }
   // (legacy per-type file handlers removed)
 
@@ -1956,10 +1969,12 @@ export default function App() {
                       ref={unifiedFileRef}
                       type="file"
                       accept=".csv,.tsv,.xlsx,.xls"
+                      multiple
                       style={{ display: 'none' }}
                       onChange={handleUnifiedFileSelected}
                     />
-                    <Button variant="outline" onClick={handleUnifiedUploadClick} title="Add/Upload CSV/XLS(X)">＋</Button>
+                    <Button variant="outline" onClick={handleUnifiedUploadClick} title="Add/Upload CSV/XLS(X) — select one or multiple files">＋</Button>
+                    <Button variant="outline" onClick={handleClearData} title="Clear current dataset" disabled={uploadBusy}>Clear</Button>
                   </div>
                 </div>
               </CardHeader>
