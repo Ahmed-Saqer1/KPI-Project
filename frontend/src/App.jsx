@@ -1159,19 +1159,19 @@ export default function App() {
         }
       }
 
-      // Standard average of the TAT column (AC) over non-null, positive entries at the row level
+      // Case-level average of TAT (consistent with other metrics)
       let tatSum = 0, tatN = 0, tatOverStd = 0
-      for (const t of monthRows) {
-        const th = (t.tat_hours != null && Number.isFinite(Number(t.tat_hours)) && Number(t.tat_hours) > 0) ? Number(t.tat_hours) : null
-        if (th != null) {
-          tatSum += th; tatN++
-          if (tatStandardHours != null && th > tatStandardHours) tatOverStd++
-          // STAT average handled at case level (priority === 0)
+      for (const [, info] of monthCases) {
+        if (info.tatN > 0) {
+          const caseAvgTat = info.tatSum / info.tatN
+          tatSum += caseAvgTat
+          tatN++
+          if (tatStandardHours != null && caseAvgTat > tatStandardHours) tatOverStd++
         }
       }
 
-      const yoy = prevYearCount > 0 ? ((total - prevYearCount) * 100.0 / prevYearCount) : null
-      const mom = prevMonthCount > 0 ? ((total - prevMonthCount) * 100.0 / prevMonthCount) : null
+      const yoy = (prevYearCount > 0 && total > 0) ? ((total - prevYearCount) * 100.0 / prevYearCount) : null
+      const mom = (prevMonthCount > 0 && total > 0) ? ((total - prevMonthCount) * 100.0 / prevMonthCount) : null
 
       rows.push({
         monthIndex: m,
@@ -1264,17 +1264,19 @@ export default function App() {
         }
       }
 
+      // Case-level average of TAT (consistent with other metrics)
       let tatSum = 0, tatN = 0, tatOverStd = 0
-      for (const t of monthRows) {
-        const th = (t.tat_hours != null && Number.isFinite(Number(t.tat_hours)) && Number(t.tat_hours) > 0) ? Number(t.tat_hours) : null
-        if (th != null) {
-          tatSum += th; tatN++
-          if (tatStandardHours != null && th > tatStandardHours) tatOverStd++
+      for (const [, info] of monthCases) {
+        if (info.tatN > 0) {
+          const caseAvgTat = info.tatSum / info.tatN
+          tatSum += caseAvgTat
+          tatN++
+          if (tatStandardHours != null && caseAvgTat > tatStandardHours) tatOverStd++
         }
       }
 
-      const yoy = prevYearCount > 0 ? ((total - prevYearCount) * 100.0 / prevYearCount) : null
-      const mom = prevMonthCount > 0 ? ((total - prevMonthCount) * 100.0 / prevMonthCount) : null
+      const yoy = (prevYearCount > 0 && total > 0) ? ((total - prevYearCount) * 100.0 / prevYearCount) : null
+      const mom = (prevMonthCount > 0 && total > 0) ? ((total - prevMonthCount) * 100.0 / prevMonthCount) : null
 
       rows.push({
         monthIndex: m,
@@ -1615,7 +1617,7 @@ export default function App() {
   const styles = {
     container: { minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'transparent', color: 'var(--text)', overflowX: 'hidden' },
     header: { padding: 'clamp(1rem, 2.5vw, 1.5rem) clamp(1rem, 3vw, 1.5rem)', position: 'sticky', top: 0, zIndex: 50, borderBottom: '1px solid var(--card-border)', background: 'var(--header-bg)', backdropFilter: 'blur(10px) saturate(1.1)', WebkitBackdropFilter: 'blur(10px) saturate(1.1)', boxShadow: '0 8px 24px rgba(99,102,241,0.10)' },
-    title: { margin: 0, fontSize: 'clamp(1.15rem, 1.6vw + 0.8rem, 1.6rem)', fontWeight: 800, letterSpacing: '-0.015em', lineHeight: 1.1, background: 'linear-gradient(90deg, var(--accent-start), var(--accent-mid), var(--accent-end))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', textRendering: 'optimizeLegibility' },
+    title: { margin: 0, fontSize: 'clamp(1.25rem, 2vw + 0.5rem, 1.8rem)', fontWeight: 600, letterSpacing: '0.02em', lineHeight: 1.3, paddingBottom: '0.15rem', background: 'linear-gradient(135deg, #0f172a 0%, #4f46e5 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', color: '#0f172a', textRendering: 'optimizeLegibility', whiteSpace: 'nowrap', display: 'inline-block' },
     main: { flex: 1, display: 'grid', gap: 'clamp(0.5rem, 1.5vw, 1rem)', padding: 'clamp(0.75rem, 2vw, 1.25rem)', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', maxWidth: 'min(1200px, 100%)', width: '100%', margin: '0 auto' },
     card: { background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: '12px', padding: '1rem', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', backdropFilter: 'blur(6px)' },
     metricCard: { background: 'var(--surface-2)', border: '1px solid var(--card-border)', borderRadius: '10px', padding: '0.75rem', backdropFilter: 'blur(6px)' },
@@ -1929,7 +1931,7 @@ export default function App() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div className="flex items-center justify-between gap-3">
-          <h1 style={styles.title}>Cytogenetics KPI Dashboard (MVP)</h1>
+          <h1 style={styles.title}>KPInsight</h1>
           <nav style={styles.nav}>
             <button
               style={{ ...styles.navLink, ...(activePage === 'dashboard' ? styles.navLinkActive : {}) }}
